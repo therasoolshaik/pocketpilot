@@ -1,16 +1,26 @@
 import { useState } from 'react'
 import BrandLogo from './BrandLogo'
+import { loginUser, signupUser } from '../services/authApi'
 
-function LoginForm({ onLoginSuccess }) {
+function LoginForm({ onAuthSuccess }) {
+  const [mode, setMode] = useState('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const isSignup = mode === 'signup'
+
   function validateForm() {
     const nextErrors = {}
+    const trimmedName = name.trim()
     const trimmedEmail = email.trim()
+
+    if (isSignup && !trimmedName) {
+      nextErrors.name = 'Please enter your name.'
+    }
 
     if (!trimmedEmail) {
       nextErrors.email = 'Please enter your email address.'
@@ -39,19 +49,24 @@ function LoginForm({ onLoginSuccess }) {
     }
 
     setIsSubmitting(true)
+    setErrors({})
 
-    await new Promise((resolve) => {
-      setTimeout(resolve, 1200)
-    })
+    try {
+      const authResponse = isSignup
+        ? await signupUser({ name: name.trim(), email: email.trim(), password })
+        : await loginUser({ email: email.trim(), password })
 
-    console.log({
-      email: email.trim(),
-      passwordLength: password.length,
-      rememberMe,
-    })
+      onAuthSuccess(authResponse)
+    } catch (error) {
+      setErrors({ form: error.message })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-    setIsSubmitting(false)
-    onLoginSuccess()
+  function toggleMode(nextMode) {
+    setMode(nextMode)
+    setErrors({})
   }
 
   return (
@@ -60,11 +75,39 @@ function LoginForm({ onLoginSuccess }) {
 
       <div className="login-copy">
         <p className="eyebrow">Personal finance dashboard</p>
-        <h1 id="login-title">Welcome back</h1>
-        <p>Sign in to review spending, budgets, and your next money moves.</p>
+        <h1 id="login-title">{isSignup ? 'Create your account' : 'Welcome back'}</h1>
+        <p>
+          {isSignup
+            ? 'Start tracking spending, budgets, and your next money moves.'
+            : 'Sign in to review spending, budgets, and your next money moves.'}
+        </p>
       </div>
 
       <form className="login-form" onSubmit={handleSubmit}>
+        {errors.form && <p className="form-error">{errors.form}</p>}
+
+        {isSignup && (
+          <>
+            <label htmlFor="name">Name</label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              placeholder="Your name"
+              autoComplete="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              aria-invalid={errors.name ? 'true' : 'false'}
+              aria-describedby={errors.name ? 'name-error' : undefined}
+            />
+            {errors.name && (
+              <p className="field-error" id="name-error">
+                {errors.name}
+              </p>
+            )}
+          </>
+        )}
+
         <label htmlFor="email">Email address</label>
         <input
           id="email"
@@ -89,7 +132,7 @@ function LoginForm({ onLoginSuccess }) {
           name="password"
           type="password"
           placeholder="Enter your password"
-          autoComplete="current-password"
+          autoComplete={isSignup ? 'new-password' : 'current-password'}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           aria-invalid={errors.password ? 'true' : 'false'}
@@ -117,7 +160,7 @@ function LoginForm({ onLoginSuccess }) {
         </div>
 
         <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Signing in...' : 'Sign in'}
+          {isSubmitting ? 'Please wait...' : isSignup ? 'Create account' : 'Sign in'}
         </button>
       </form>
 
@@ -130,7 +173,14 @@ function LoginForm({ onLoginSuccess }) {
       </button>
 
       <p className="signup-prompt">
-        New to PocketPilot? <a href="#create-account">Create an account</a>
+        {isSignup ? 'Already have an account?' : 'New to PocketPilot?'}{' '}
+        <button
+          className="link-button"
+          type="button"
+          onClick={() => toggleMode(isSignup ? 'login' : 'signup')}
+        >
+          {isSignup ? 'Sign in' : 'Create an account'}
+        </button>
       </p>
     </section>
   )

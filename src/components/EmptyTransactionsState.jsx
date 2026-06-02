@@ -7,8 +7,8 @@ function EmptyTransactionsState({ onAddTransaction }) {
         <div className="empty-orbit">
           <WalletCards size={34} strokeWidth={1.9} />
         </div>
-        <span className="empty-pill income">+₹50,000</span>
-        <span className="empty-pill expense">-₹250</span>
+        <span className="empty-pill income">+INR 50,000</span>
+        <span className="empty-pill expense">-INR 250</span>
       </div>
 
       <div className="empty-copy">

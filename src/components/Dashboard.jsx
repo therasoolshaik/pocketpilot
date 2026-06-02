@@ -1,45 +1,139 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import AnalyticsPage from './AnalyticsPage'
+import BudgetsPage from './BudgetsPage'
+import CategoriesPage from './CategoriesPage'
+import GoalsPage from './GoalsPage'
+import SettingsPage from './SettingsPage'
 import Sidebar from './Sidebar'
 import TransactionsPage from './TransactionsPage'
+import { fetchTransactions } from '../services/transactionApi'
 
-const summaryCards = [
-  {
-    label: 'Total balance',
-    value: '$8,420.50',
-    meta: '+12.5% from last month',
-  },
-  {
-    label: 'Monthly spending',
-    value: '$2,184.30',
-    meta: '$316 below budget',
-  },
-  {
-    label: 'Savings goal',
-    value: '74%',
-    meta: '$3,700 of $5,000 saved',
-  },
-]
+function formatCurrency(amount) {
+  return `INR ${Number(amount).toLocaleString('en-IN')}`
+}
 
-const transactions = [
-  {
-    name: 'Grocery Market',
-    category: 'Food',
-    amount: '-$84.20',
-  },
-  {
-    name: 'Salary Deposit',
-    category: 'Income',
-    amount: '+$4,850.00',
-  },
-  {
-    name: 'Metro Card',
-    category: 'Transport',
-    amount: '-$32.00',
-  },
-]
+function formatTransactionAmount(transaction) {
+  const prefix = transaction.type === 'income' ? '+' : '-'
+  return `${prefix}${formatCurrency(transaction.amount)}`
+}
 
-function Dashboard({ onLogout }) {
+function isCurrentMonth(date) {
+  const transactionDate = new Date(date)
+  const now = new Date()
+
+  return (
+    transactionDate.getFullYear() === now.getFullYear() &&
+    transactionDate.getMonth() === now.getMonth()
+  )
+}
+
+function Dashboard({ onLogout, token }) {
   const [activeSection, setActiveSection] = useState('dashboard')
+  const [transactions, setTransactions] = useState([])
+  const [isLoadingOverview, setIsLoadingOverview] = useState(false)
+  const [overviewError, setOverviewError] = useState('')
+
+  useEffect(() => {
+    if (activeSection !== 'dashboard') {
+      return undefined
+    }
+
+    let isActive = true
+
+    async function loadOverview() {
+      try {
+        setIsLoadingOverview(true)
+        setOverviewError('')
+        const data = await fetchTransactions(token)
+
+        if (isActive) {
+          setTransactions(data)
+        }
+      } catch (error) {
+        if (isActive) {
+          setOverviewError(error.message)
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingOverview(false)
+        }
+      }
+    }
+
+    loadOverview()
+
+    return () => {
+      isActive = false
+    }
+  }, [activeSection, token])
+
+  const overview = useMemo(() => {
+    const totals = transactions.reduce(
+      (currentTotals, transaction) => {
+        const amount = Number(transaction.amount) || 0
+        const bucket = transaction.type === 'income' ? 'income' : 'expense'
+
+        return {
+          ...currentTotals,
+          [bucket]: currentTotals[bucket] + amount,
+        }
+      },
+      { income: 0, expense: 0 },
+    )
+
+    const monthlyTotals = transactions
+      .filter((transaction) => isCurrentMonth(transaction.date))
+      .reduce(
+        (currentTotals, transaction) => {
+          const amount = Number(transaction.amount) || 0
+          const bucket = transaction.type === 'income' ? 'income' : 'expense'
+
+          return {
+            ...currentTotals,
+            [bucket]: currentTotals[bucket] + amount,
+          }
+        },
+        { income: 0, expense: 0 },
+      )
+
+    const balance = totals.income - totals.expense
+    const savingsRate = monthlyTotals.income
+      ? Math.round(
+          ((monthlyTotals.income - monthlyTotals.expense) / monthlyTotals.income) *
+            100,
+        )
+      : 0
+    const spendingRatio = monthlyTotals.income
+      ? Math.min(Math.round((monthlyTotals.expense / monthlyTotals.income) * 100), 100)
+      : 0
+
+    return {
+      balance,
+      monthlyIncome: monthlyTotals.income,
+      monthlyExpense: monthlyTotals.expense,
+      recentTransactions: transactions.slice(0, 4),
+      savingsRate,
+      spendingRatio,
+    }
+  }, [transactions])
+
+  const summaryCards = [
+    {
+      label: 'Total balance',
+      value: formatCurrency(overview.balance),
+      meta: `${transactions.length} saved transactions`,
+    },
+    {
+      label: 'Monthly income',
+      value: formatCurrency(overview.monthlyIncome),
+      meta: 'Income recorded this month',
+    },
+    {
+      label: 'Monthly spending',
+      value: formatCurrency(overview.monthlyExpense),
+      meta: `${overview.savingsRate}% savings rate`,
+    },
+  ]
 
   return (
     <main className="app-shell">
@@ -51,19 +145,36 @@ function Dashboard({ onLogout }) {
 
       <div className="dashboard-page">
         {activeSection === 'transactions' ? (
-          <TransactionsPage />
+          <TransactionsPage token={token} />
+        ) : activeSection === 'categories' ? (
+          <CategoriesPage token={token} />
+        ) : activeSection === 'budgets' ? (
+          <BudgetsPage token={token} />
+        ) : activeSection === 'goals' ? (
+          <GoalsPage token={token} />
+        ) : activeSection === 'analytics' ? (
+          <AnalyticsPage token={token} />
+        ) : activeSection === 'settings' ? (
+          <SettingsPage token={token} />
         ) : (
           <>
             <section className="dashboard-hero" aria-labelledby="dashboard-title">
               <div>
                 <p className="eyebrow">Today overview</p>
-                <h1 id="dashboard-title">Your money is on track.</h1>
+                <h1 id="dashboard-title">
+                  {transactions.length
+                    ? 'Your money snapshot is ready.'
+                    : 'Start with your first transaction.'}
+                </h1>
                 <p>
-                  Spending is trending below budget, and your savings goal is
-                  moving ahead steadily.
+                  {transactions.length
+                    ? 'This dashboard now reflects the income and expenses you have saved.'
+                    : 'Add income and expenses to see balance, spending, and recent activity here.'}
                 </p>
               </div>
             </section>
+
+            {overviewError && <p className="form-error">{overviewError}</p>}
 
             <section className="summary-grid" aria-label="Account summary">
               {summaryCards.map((card) => (
@@ -78,17 +189,17 @@ function Dashboard({ onLogout }) {
             <section className="dashboard-grid">
               <article className="dashboard-card">
                 <div className="card-heading">
-                  <h2>Budget health</h2>
-                  <span>May</span>
+                  <h2>Spending health</h2>
+                  <span>This month</span>
                 </div>
 
                 <div className="budget-meter" aria-hidden="true">
-                  <span></span>
+                  <span style={{ width: `${overview.spendingRatio}%` }}></span>
                 </div>
 
                 <div className="budget-details">
-                  <span>Spent $2,184</span>
-                  <strong>$316 remaining</strong>
+                  <span>Spent {formatCurrency(overview.monthlyExpense)}</span>
+                  <strong>{overview.spendingRatio}% of income</strong>
                 </div>
               </article>
 
@@ -99,15 +210,21 @@ function Dashboard({ onLogout }) {
                 </div>
 
                 <div className="transaction-list">
-                  {transactions.map((transaction) => (
-                    <div className="transaction-row" key={transaction.name}>
-                      <div>
-                        <strong>{transaction.name}</strong>
-                        <span>{transaction.category}</span>
+                  {isLoadingOverview ? (
+                    <p>Loading transactions...</p>
+                  ) : overview.recentTransactions.length ? (
+                    overview.recentTransactions.map((transaction) => (
+                      <div className="transaction-row" key={transaction.id}>
+                        <div>
+                          <strong>{transaction.title}</strong>
+                          <span>{transaction.category}</span>
+                        </div>
+                        <b>{formatTransactionAmount(transaction)}</b>
                       </div>
-                      <b>{transaction.amount}</b>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p>No transactions yet.</p>
+                  )}
                 </div>
               </article>
             </section>

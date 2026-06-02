@@ -2,10 +2,10 @@ import { Pencil, Trash2 } from 'lucide-react'
 
 function formatAmount(transaction) {
   const prefix = transaction.type === 'income' ? '+' : '-'
-  return `${prefix}₹${Number(transaction.amount).toLocaleString('en-IN')}`
+  return `${prefix}INR ${Number(transaction.amount).toLocaleString('en-IN')}`
 }
 
-function TransactionList({ transactions }) {
+function TransactionList({ transactions, onDeleteTransaction, onEditTransaction }) {
   return (
     <section className="transactions-table-card" aria-label="Transactions list">
       <div className="transactions-table-header">
@@ -38,10 +38,18 @@ function TransactionList({ transactions }) {
             </strong>
 
             <div className="table-actions">
-              <button type="button" aria-label={`Edit ${transaction.title}`}>
+              <button
+                type="button"
+                onClick={() => onEditTransaction(transaction)}
+                aria-label={`Edit ${transaction.title}`}
+              >
                 <Pencil size={16} strokeWidth={2.2} aria-hidden="true" />
               </button>
-              <button type="button" aria-label={`Delete ${transaction.title}`}>
+              <button
+                type="button"
+                onClick={() => onDeleteTransaction(transaction.id)}
+                aria-label={`Delete ${transaction.title}`}
+              >
                 <Trash2 size={16} strokeWidth={2.2} aria-hidden="true" />
               </button>
             </div>
